@@ -1,26 +1,61 @@
 'use strict';
 // catController
-const catModel = require('../models/catModel');
+const { getAllCats, getCat, addCat } = require('../models/catModel');
+const { httpError } = require('../utils/errors');
 
-// const cats = catModel.cats;
-const { getAllCats, getCat } = catModel;
-
-const cat_list_get = async (req, res) => {
+const cat_list_get = async (req, res, next) => {
   try {
-    res.json(await getAllCats());
+    const cats = await getAllCats(next);
+    if (cats.length > 0) {
+      res.json(cats);
+    } else {
+      next('No cats found', 404);
+    }
   } catch (e) {
     console.log('cat_list_get error', e.message);
+    next(httpError('internal server error', 500));
   }
 };
 
-const cat_get = async (req, res) => {
-    const vastaus = getCat(req.params.id);
-    res.json(await vastaus);
+const cat_get = async (req, res, next) => {
+  try {
+    const vastaus = await getCat(req.params.id, next);
+    if (vastaus.length > 0) {
+      res.json(vastaus.pop());
+    } else {
+      next(httpError('No cat found', 404));
+    }
+  } catch (e) {
+    console.log('cat_get error', e.message);
+    next(httpError('internal server error', 500));
+  }
 };
 
-const cat_post = (req, res) => {
+const cat_post = async (req, res, next) => {
   console.log(req.body, req.file);
-  res.send('From this enpoint you can add cats.');
+  // pvm VVVV-KK-PP esim 2010-05-28
+  try {
+    const { name, birthdate, weight, owner } = req.body;
+    const tulos = await addCat(
+      name,
+      weight,
+      owner,
+      birthdate,
+      req.file.filename,
+      next
+    );
+    if (tulos.affectedRows > 0) {
+      res.json({
+        message: 'cat added',
+        cat_id: tulos.insertId,
+      });
+    } else {
+      next(httpError('No user inserted', 400));
+    }
+  } catch (e) {
+    console.log('user_post error', e.message);
+    next(httpError('internal server error', 500));
+  }
 };
 
 module.exports = {
