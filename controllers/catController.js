@@ -1,6 +1,12 @@
 'use strict';
-// catController
-const { getAllCats, getCat, addCat, modifyCat, deleteCat } = require('../models/catModel');
+const { validationResult } = require('express-validator');
+const {
+  getAllCats,
+  getCat,
+  addCat,
+  modifyCat,
+  deleteCat,
+} = require('../models/catModel');
 const { httpError } = require('../utils/errors');
 
 const cat_list_get = async (req, res, next) => {
@@ -32,8 +38,20 @@ const cat_get = async (req, res, next) => {
 };
 
 const cat_post = async (req, res, next) => {
-  console.log(req.body, req.file);
-  // pvm VVVV-KK-PP esim 2010-05-28
+  console.log('cat_post', req.body, req.file);
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.log('cat_post validation', errors.array());
+    next(httpError('invalid data', 400));
+    return;
+  }
+
+  if (!req.file) {
+    const err = httpError('file not valid', 400);
+    next(err);
+    return;
+  }
+
   try {
     const { name, birthdate, weight, owner } = req.body;
     const tulos = await addCat(
@@ -60,6 +78,12 @@ const cat_post = async (req, res, next) => {
 
 const cat_put = async (req, res, next) => {
   console.log('cat_put', req.body);
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.log('cat_put validation', errors.array());
+    next(httpError('invalid data', 400));
+    return;
+  }
   // pvm VVVV-KK-PP esim 2010-05-28
   try {
     const { name, birthdate, weight, owner, id } = req.body;
@@ -85,12 +109,12 @@ const cat_delete = async (req, res, next) => {
       res.json({
         message: 'cat deleted',
         cat_id: vastaus.insertId,
-    }); 
+      });
     } else {
       next(httpError('No cat found', 404));
     }
   } catch (e) {
-    console.log('cat_get error', e.message);
+    console.log('cat_delete error', e.message);
     next(httpError('internal server error', 500));
   }
 };
