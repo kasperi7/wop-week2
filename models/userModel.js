@@ -23,10 +23,11 @@ const getUser = async (id, next) => {
     );
     return rows;
   } catch (e) {
-    console.error('getAllUsers error', e.message);
+    console.error('getUser error', e.message);
     next(httpError('Database error', 500));
   }
 };
+
 const addUser = async (name, email, password, next) => {
   try {
     const [rows] = await promisePool.execute(
@@ -39,8 +40,24 @@ const addUser = async (name, email, password, next) => {
     next(httpError('Database error', 500));
   }
 };
+
+const getUserLogin = async (params) => {
+  try {
+    console.log('getUserLogin', params);
+    const [rows] = await promisePool.execute(
+      'SELECT * FROM wop_user WHERE email = ?;',
+      params
+    );
+    return rows;
+  } catch (e) {
+    console.log('getUserLogin error', e.message);
+    next(httpError('Database error', 500));
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUser,
   addUser,
+  getUserLogin,
 };
