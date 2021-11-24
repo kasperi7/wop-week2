@@ -1,45 +1,158 @@
 'use strict';
-const passport = require('passport');
-const Strategy = require('passport-local').Strategy;
-const passportJWT = require('passport-jwt');
-const bcrypt = require('bcryptjs');
-const JWTStrategy = passportJWT.Strategy;
-const ExtractJwt = passportJWT.ExtractJwt;
-const { getUserLogin } = require('../models/userModel');
+const { validationResult } = require('express-validator');
+// catController
+const {
+  getAllCats,
+  getCat,
+  addCat,
+  modifyCat,
+  deleteCat,
+} = require('../models/catModel');
+const { httpError } = require('../utils/errors');
+const { makeThumbnail } = require('../utils/resize');
 
-// local strategy for username password login
-passport.use(
-  new Strategy(async (username, password, done) => {
-    const params = [username];
-    try {
-      const [user] = await getUserLogin(params);
-      console.log('Local strategy', user); // result is binary row
-      if (!user) {
-        return done(null, false);
-      }
-      if (bcrypt.compareSync(password, user.password)) {
-        return done(null, false);
-      }
-      return done(null, { ...user }, { message: 'Logged In Successfully' }); // use spread syntax to create shallow copy to get rid of binary row type
-    } catch (err) {
-      return done(err);
+const cat_list_get = async (req, res, next) => {
+  try {
+    const cats = await getAllCats(next);
+    if (cats.length > 0) {
+      res.json(cats);
+    } else {
+      next('No cats found', 404);
     }
-  })
-);
+  } catch (e) {
+    console.log('cat_list_get error', e.message);
+    next(httpError('internal server error', 500));
+  }
+};
 
-// TODO: JWT strategy for handling bearer token
-// consider .env for secret, e.g. secretOrKey: process.env.JWT_SECRET
-passport.use(
-  new JWTStrategy(
-    {
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: process.env.JWT_SECRET,
-    },
-    (jwtPayload, done) => {
-      // console.log('payload', jwtPayload);
-      done(null, jwtPayload);
+const cat_get = async (req, res, next) => {
+  try {
+    const vastaus = await getCat(req.params.id, next);
+    if (vastaus.length > 0) {
+      res.json(vastaus.pop());
+    } else {
+      next(httpError('No cat found', 404));
     }
-  )
-);
+  } catch (e) {
+    console.log('cat_get error', e.message);
+    next(httpError('internal server error', 500));
+  }
+};
 
-module.exports = passport;
+const cat_post = async (req, res, next) => {
+  console.log('cat_post', req.body, req.file, req.user);
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.log('cat_post validation', errors.array());
+    next(httpError('invalid data', 400));
+    return;
+  }
+
+  if (!req.file) {
+    const err = httpError('file not valid', 400);
+    next(err);
+    return;
+  }
+
+  try {
+    const thumb = await makeThumbnail(
+      req.file.path,
+      './thumbnails/' + req.file.filename
+    );
+
+    const { name, birthdate, weight } = req.body;
+
+    const tulos = await addCat(
+      name,
+      weight,
+      req.user.user_id,
+      birthdate,
+      req.file.filename,
+      next
+    );
+    if (thumb) {
+      if (tulos.affectedRows > 0) {
+        res.json({
+          message: 'cat added',
+          cat_id: tulos.insertId,
+        });
+      } else {
+        next(httpError('No cat inserted', 400));
+      }
+    }
+  } catch (e) {
+    console.log('cat_post error', e.message);
+    next(httpError('internal server error', 500));
+  }
+};
+
+const cat_put = async (req, res, next) => {
+  console.log('cat_put', req.body, req.params);
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.log('cat_put validation', errors.array());
+    next(httpError('invalid data', 400));
+    return;
+  }
+  // pvm VVVV-KK-PP esim 2010-05-28
+  try {
+    const { name, birthdate, weight } = req.body;
+    /*let owner = req.user.user_id;
+    if (req.user.role === 0) {
+      owner = req.body.owner;
+    }*/
+
+    const owner = req.user.role === 0 ? req.body.owner : req.user.user_id;
+
+    const tulos = await modifyCat(
+      name,
+      weight,
+      owner,
+      birthdate,
+      req.params.id,
+      req.user.role,
+      next
+    );
+    if (tulos.affectedRows > 0) {
+      res.json({
+        message: 'cat modified',
+        cat_id: tulos.insertId,
+      });
+    } else {
+      next(httpError('No cat modified', 400));
+    }
+  } catch (e) {
+    console.log('cat_put error', e.message);
+    next(httpError('internal server error', 500));
+  }
+};
+
+const cat_delete = async (req, res, next) => {
+  try {
+    const vastaus = await deleteCat(
+      req.params.id,
+      req.user.user_id,
+      req.user.role,
+      next
+    );
+    if (vastaus.affectedRows > 0) {
+      res.json({
+        message: 'cat deleted',
+        cat_id: vastaus.insertId,
+      });
+    } else {
+      next(httpError('No cat found', 404));
+    }
+  } catch (e) {
+    console.log('cat_delete error', e.message);
+    next(httpError('internal server error', 500));
+  }
+};
+
+module.exports = {
+  cat_list_get,
+  cat_get,
+  cat_post,
+  cat_put,
+  cat_delete,
+};
